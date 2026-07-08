@@ -33,7 +33,10 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         systemInstruction: system ? { parts: [{ text: system }] } : undefined,
         contents: [{ role: 'user', parts: [{ text: userText }] }],
-        generationConfig: { maxOutputTokens: max_tokens || 2048 },
+        generationConfig: {
+          maxOutputTokens: max_tokens || 2048,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
     });
 
