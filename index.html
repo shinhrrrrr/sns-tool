@@ -71,7 +71,7 @@
   .field .hint{
     font-size:11.5px; color:var(--text-mute); margin-top:6px; line-height:1.5;
   }
-  input[type=text], textarea{
+  input[type=text], textarea, select{
     width:100%;
     background:#fff;
     border:1px solid var(--line);
@@ -83,11 +83,18 @@
     resize:vertical;
     transition:border-color .15s ease;
   }
+  select{ cursor:pointer; }
   input[type=text]::placeholder, textarea::placeholder{ color:#B7B2A8; }
-  input[type=text]:focus, textarea:focus{
+  input[type=text]:focus, textarea:focus, select:focus{
     outline:none; border-color:var(--accent);
   }
   textarea{ min-height:92px; line-height:1.55; }
+
+  input[type=range]{
+    width:100%;
+    accent-color:var(--accent);
+    margin:6px 0 4px;
+  }
 
   .chips{ display:flex; flex-wrap:wrap; gap:8px; }
   .chip{
@@ -264,6 +271,14 @@
     <p class="sub">호텔 SNS 운영 대행을 위한 원고 발행 데스크.<br>정보를 채우면 인스타그램 또는 블로그용 원고를 만들어 드립니다.</p>
 
     <div class="field">
+      <label>저장된 호텔</label>
+      <select id="f-preset">
+        <option value="">직접 입력</option>
+      </select>
+      <div class="hint">자주 쓰는 호텔은 선택 한 번으로 키워드·톤이 자동으로 채워져요.</div>
+    </div>
+
+    <div class="field">
       <label>호텔명</label>
       <input type="text" id="f-hotel" placeholder="예: 머큐어 서울 마곡">
     </div>
@@ -290,6 +305,12 @@
         <div class="chip" data-v="친구/모임">친구·모임</div>
       </div>
       <div class="hint">선택하지 않으면 전체 대상 톤으로 작성해요. '외국인' 선택 시 국문+영문으로 함께 생성돼요.</div>
+    </div>
+
+    <div class="field">
+      <label>격식도</label>
+      <input type="range" id="f-formality" min="1" max="5" value="3" step="1">
+      <div class="hint" id="formality-label">정중한 존댓말 (보통)</div>
     </div>
 
     <div class="field">
@@ -329,10 +350,13 @@
 
 <script>
 const els = {
+  preset: document.getElementById('f-preset'),
   hotel: document.getElementById('f-hotel'),
   keyword: document.getElementById('f-keyword'),
   issue: document.getElementById('f-issue'),
   targetWrap: document.getElementById('f-target'),
+  formality: document.getElementById('f-formality'),
+  formalityLabel: document.getElementById('formality-label'),
   formatWrap: document.getElementById('f-format'),
   btnGen: document.getElementById('btn-generate'),
   outArea: document.getElementById('out-area'),
@@ -341,6 +365,148 @@ const els = {
   btnCopy: document.getElementById('btn-copy'),
   outMeta: document.getElementById('out-meta'),
 };
+
+// ── 호텔별 저장 정보 ──────────────────────────────────
+// 담당하시는 다른 호텔이 추가/변경되면 알려주세요, 이 목록에 반영해드릴게요.
+// formats: 이 호텔에서 실제로 쓰는 발행 포맷 ('instagram', 'blog')
+const hotelPresets = [
+  {
+    name: '이천 라드라비 아트 앤 리조트',
+    keywords: '경기도 이천 데이트, 서울 근교 리조트',
+    toneNote: '자연과 예술, 웰니스가 만나는 곳 (Where Nature Meets Art and Wellness)',
+    contact: '주소: 경기도 이천시 모가면 진상미로 1163길 220 · 전화: 031-631-5800',
+    formality: 3,
+    formats: ['instagram', 'blog'],
+  },
+  {
+    name: '서울 더퍼스트스테이',
+    keywords: '마곡 호텔, 발산 호텔, 김포공항 인근 숙소',
+    toneNote: '명품의 가치가 느껴지는 비즈니스 감성 공간',
+    contact: '주소: 서울특별시 강서구 마곡동로4길 23 · 전화: 02-2600-8300',
+    formality: 4,
+    formats: ['instagram'],
+  },
+  {
+    name: '창녕 부곡로얄호텔',
+    keywords: '창녕 온천 호텔, 창녕 가족 숙소',
+    toneNote: '좋은 온천 수질과 아이들 놀기 좋은 환경의 조화',
+    contact: '주소: 경남 창녕군 부곡면 온천중앙로 3 부곡로얄관광호텔 · 전화: 055-536-7300',
+    formality: 3,
+    formats: ['instagram'],
+  },
+  {
+    name: '제주 라마다제주시티호텔',
+    keywords: '제주도호텔, 제주도숙소, 한라산숙소',
+    toneNote: '',
+    contact: '주소: 제주 제주시 중앙로 304, Jeju 63222 · 대표번호: 064-759-8831 · 예약문의: 02-512-8886',
+    formality: 3,
+    formats: ['instagram'],
+  },
+  {
+    name: '제주 한림리조트',
+    keywords: '제주한림리조트, 제주힐링여행, 제주바다숙소, 제주리조트',
+    toneNote: '푸른 바다와 제주의 자연을 담은 낭만적인 휴양지',
+    contact: '주소: 제주시 한림읍 일주서로 5083-5 (협재해수욕장 2분거리) · 전화: 064-796-8231 · 이메일: hallimresort@naver.com',
+    formality: 3,
+    formats: ['instagram'],
+  },
+  {
+    name: '머큐어 서울 마곡',
+    keywords: '마곡 호텔, 서울 수영장 호텔, 서울 호캉스',
+    toneNote: '',
+    contact: '주소: 143 Magok joongang-ro, Gangsu-gu, Seoul, Korea 07797 · 전화: 02-2261-6000',
+    formality: 3,
+    formats: ['instagram', 'blog'],
+  },
+  {
+    name: '강릉 SL호텔강릉',
+    keywords: '강릉 호텔, 주문진 호텔, 강릉 오션뷰 숙소',
+    toneNote: '',
+    contact: '주소: 강원 강릉시 주문진읍 주문로 59 SL호텔 강릉, Gangneung 25414 · 전화: 033-920-1800',
+    formality: 3,
+    formats: ['instagram'],
+  },
+  {
+    name: '강릉 더홍씨호텔 강릉',
+    keywords: '강릉 호텔, 강릉여행, 강릉숙박, 강릉숙소',
+    toneNote: '',
+    contact: '주소: 교동광장로100번길 8, Gangneung 25512 · 전화: 033-641-8011',
+    formality: 3,
+    formats: ['instagram', 'blog'],
+  },
+  {
+    name: '서울 서울가든호텔',
+    keywords: '마포역 숙소, 공덕역 숙소, 서울 호캉스',
+    toneNote: '',
+    contact: '주소: 서울 마포구 마포대로 58 가든호텔 · 전화: 02-710-7111',
+    formality: 3,
+    formats: ['instagram'],
+  },
+  {
+    name: '서울 호텔국도',
+    keywords: '을지로 숙소, 서울 호캉스, 서울 수영장 호텔',
+    toneNote: '',
+    contact: '주소: 서울 중구 을지로 164 호텔국도 · 전화: 02-6466-1234',
+    formality: 3,
+    formats: ['instagram'],
+  },
+];
+
+function populatePresets(){
+  hotelPresets.forEach((h, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = h.name;
+    els.preset.appendChild(opt);
+  });
+}
+populatePresets();
+
+let currentContact = '';
+let currentAllowedFormats = ['instagram', 'blog'];
+
+function applyFormatRestriction(){
+  const blogBtn = [...els.formatWrap.children].find(b => b.dataset.v === 'blog');
+  const blogAllowed = currentAllowedFormats.includes('blog');
+  blogBtn.disabled = !blogAllowed;
+  blogBtn.style.opacity = blogAllowed ? '1' : '.4';
+  blogBtn.style.cursor = blogAllowed ? 'pointer' : 'not-allowed';
+  if(!blogAllowed && format === 'blog'){
+    format = 'instagram';
+    [...els.formatWrap.children].forEach(b => b.classList.toggle('on', b.dataset.v === 'instagram'));
+  }
+}
+
+els.preset.addEventListener('change', () => {
+  const idx = els.preset.value;
+  if(idx === ''){
+    currentAllowedFormats = ['instagram', 'blog'];
+    applyFormatRestriction();
+    return; // 직접 입력 선택 시 나머지는 그대로 둠
+  }
+  const h = hotelPresets[Number(idx)];
+  els.hotel.value = h.name;
+  els.keyword.value = h.keywords;
+  els.formality.value = h.formality;
+  currentContact = h.contact || '';
+  currentAllowedFormats = h.formats;
+  updateFormalityLabel();
+  applyFormatRestriction();
+});
+
+const formalityLabels = {
+  1: '편안한 존댓말',
+  2: '무난한 존댓말',
+  3: '정중한 존댓말 (보통)',
+  4: '격식 있는 톤',
+  5: '매우 격식 있는 공식 발표문 톤',
+};
+
+function updateFormalityLabel(){
+  els.formalityLabel.textContent = formalityLabels[els.formality.value];
+}
+els.formality.addEventListener('input', updateFormalityLabel);
+updateFormalityLabel();
 
 let selectedTargets = [];
 let format = 'instagram';
@@ -361,7 +527,7 @@ els.targetWrap.addEventListener('click', (e) => {
 
 els.formatWrap.addEventListener('click', (e) => {
   const btn = e.target.closest('button');
-  if(!btn) return;
+  if(!btn || btn.disabled) return;
   format = btn.dataset.v;
   [...els.formatWrap.children].forEach(b => b.classList.toggle('on', b === btn));
 });
@@ -460,10 +626,25 @@ function buildUserPrompt(){
   const issue = els.issue.value.trim() || '(세부 정보 미입력 — 일반적인 표현으로 작성)';
   const targets = selectedTargets.length ? selectedTargets.join(', ') : '전체 대상';
 
+  const presetIdx = els.preset.value;
+  const preset = presetIdx !== '' ? hotelPresets[Number(presetIdx)] : null;
+
+  const formalityDesc = formalityLabels[els.formality.value];
+
+  let extra = `톤 강도 조정: ${formalityDesc} 수준으로 맞춰주세요.`;
+
+  if(preset && preset.toneNote){
+    extra += `\n이 호텔만의 톤 메모: ${preset.toneNote}`;
+  }
+  if(currentContact){
+    extra += `\n문의 연락처(자연스럽게 필요한 곳에 활용): ${currentContact}`;
+  }
+
   return `호텔명: ${hotel}
 키워드: ${keyword}
 이슈/프로모션 내용: ${issue}
 타겟: ${targets}
+${extra}
 
 위 정보로 ${format === 'instagram' ? '인스타그램' : '네이버 블로그'} 원고를 작성해주세요.`;
 }
