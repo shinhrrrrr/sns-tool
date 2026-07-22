@@ -276,6 +276,32 @@
     border:1px solid var(--line); border-radius:999px;
     padding:5px 11px;
   }
+
+  .idea-list{
+    width:100%; max-width:640px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .idea-row{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:14px 16px;
+    cursor:pointer;
+    text-align:left;
+    font-family:inherit;
+    transition:all .15s ease;
+  }
+  .idea-row:hover{ border-color:var(--accent); background:var(--accent-tint); }
+  .idea-row .idea-title{
+    font-weight:700; font-size:14px; color:var(--text); margin-bottom:3px;
+  }
+  .idea-row .idea-desc{
+    font-size:12.5px; color:var(--text-mute); line-height:1.5;
+  }
+  .idea-row .idea-copied{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--accent-deep);
+    margin-top:6px;
+  }
 </style>
 </head>
 <body>
@@ -284,6 +310,7 @@
   <button class="on" data-tab="hotel">호텔 SNS 원고</button>
   <button data-tab="ad">광고 카피 생성기</button>
   <button data-tab="magazine">트리피카 온드미디어</button>
+  <button data-tab="idea">아이디어 메이커</button>
 </div>
 
 <div class="app">
@@ -404,6 +431,24 @@
       </div>
     </div>
 
+    <div class="tab-panel" id="panel-idea">
+      <div class="field">
+        <label>기준 계절</label>
+        <select id="idea-season">
+          <option value="auto">자동 감지 (현재 계절)</option>
+          <option value="봄">봄</option>
+          <option value="여름">여름</option>
+          <option value="가을">가을</option>
+          <option value="겨울">겨울</option>
+        </select>
+        <div class="hint">담당 호텔 10곳 + 계절 트렌드를 반영해 콘텐츠 주제 약 20개를 추천해요. 소재가 막힐 때 눌러보세요.</div>
+      </div>
+      <div class="field">
+        <label>참고 사항 (선택)</label>
+        <textarea id="idea-note" placeholder="예: 최근에 다룬 주제(중복 피하고 싶은 것), 특별히 밀고 싶은 호텔 등"></textarea>
+      </div>
+    </div>
+
     <button class="generate" id="btn-generate">원고 생성</button>
     <div class="stampline">DRAFT · 검토 후 발행하세요</div>
   </div>
@@ -436,6 +481,7 @@ const panels = {
   hotel: document.getElementById('panel-hotel'),
   ad: document.getElementById('panel-ad'),
   magazine: document.getElementById('panel-magazine'),
+  idea: document.getElementById('panel-idea'),
 };
 const deskTitle = document.getElementById('desk-title');
 const deskSub = document.getElementById('desk-sub');
@@ -443,6 +489,7 @@ const tabMeta = {
   hotel: { title: '마케팅 콘텐츠 초안 생성기', sub: '호텔 SNS 운영 대행을 위한 원고 발행 데스크.<br>정보를 채우면 인스타그램·블로그·맘카페용 원고를 만들어 드립니다.' },
   ad: { title: '광고 카피 생성기', sub: '네이버·카카오·메타 광고 지면별 글자 수 가이드에 맞춘 카피 초안을 만들어 드립니다.' },
   magazine: { title: '트리피카 온드미디어', sub: '트리피카 매거진 캐러셀용 콘텐츠 데스크.<br>주제와 페이지 수를 입력하면 캐러셀 제목·페이지별 텍스트·캡션까지 만들어 드립니다.' },
+  idea: { title: '아이디어 메이커', sub: '담당 호텔 10곳과 현재 계절을 참고해 콘텐츠 주제 아이디어를 추천해 드립니다.<br>마음에 드는 아이디어를 클릭하면 복사돼요 — 다른 탭에 붙여넣어 바로 원고화하세요.' },
 };
 let activeTab = 'hotel';
 
@@ -469,6 +516,23 @@ function resetOutput(){
     </div>`;
 }
 
+/* ── 유니코드 Mathematical Bold 변환 (서울가든호텔 전용 영문 제목용) ── */
+function boldMathSerif(str){
+  const upperBase = 0x1D400, lowerBase = 0x1D41A, digitBase = 0x1D7CE;
+  return [...str].map(ch => {
+    const code = ch.codePointAt(0);
+    if(code >= 65 && code <= 90) return String.fromCodePoint(upperBase + (code - 65));
+    if(code >= 97 && code <= 122) return String.fromCodePoint(lowerBase + (code - 97));
+    if(code >= 48 && code <= 57) return String.fromCodePoint(digitBase + (code - 48));
+    return ch;
+  }).join('');
+}
+
+const SEOUL_GARDEN_FIXED = {
+  koReserve: '▫️예약 : 프로필 링크\n▫️문의 : 02-710-7111',
+  enReserve: '▫️Reservation : Link in Bio\n▫️Inquiry : +82-2-710-7111',
+};
+
 const els = {
   preset: document.getElementById('f-preset'),
   hotel: document.getElementById('f-hotel'),
@@ -488,6 +552,8 @@ const els = {
   magStyle: document.getElementById('mag-style'),
   magPages: document.getElementById('mag-pages'),
   magNote: document.getElementById('mag-note'),
+  ideaSeason: document.getElementById('idea-season'),
+  ideaNote: document.getElementById('idea-note'),
   btnGen: document.getElementById('btn-generate'),
   outArea: document.getElementById('out-area'),
   outEyebrow: document.getElementById('out-eyebrow'),
@@ -505,7 +571,7 @@ const hotelPresets = [
   { name: '머큐어 서울 마곡', keywords: '마곡 호텔, 서울 수영장 호텔, 서울 호캉스', toneNote: '', contact: '주소: 143 Magok joongang-ro, Gangsu-gu, Seoul, Korea 07797 · 전화: 02-2261-6000', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
   { name: '강릉 SL호텔강릉', keywords: '강릉 호텔, 주문진 호텔, 강릉 오션뷰 숙소', toneNote: '', contact: '주소: 강원 강릉시 주문진읍 주문로 59 SL호텔 강릉, Gangneung 25414 · 전화: 033-920-1800', formality: 3, formats: ['instagram', 'momcafe'] },
   { name: '강릉 더홍씨호텔 강릉', keywords: '강릉 호텔, 강릉여행, 강릉숙박, 강릉숙소', toneNote: '', contact: '주소: 교동광장로100번길 8, Gangneung 25512 · 전화: 033-641-8011', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
-  { name: '서울 서울가든호텔', keywords: '마포역 숙소, 공덕역 숙소, 서울 호캉스', toneNote: '', contact: '주소: 서울 마포구 마포대로 58 가든호텔 · 전화: 02-710-7111', formality: 3, formats: ['instagram', 'momcafe'] },
+  { name: '서울 서울가든호텔', keywords: '마포역 숙소, 공덕역 숙소, 서울 호캉스', toneNote: '', contact: '주소: 서울 마포구 마포대로 58 가든호텔 · 전화: 02-710-7111', formality: 3, formats: ['instagram', 'momcafe'], specialFormat: 'seoulGarden' },
   { name: '서울 호텔국도', keywords: '을지로 숙소, 서울 호캉스, 서울 수영장 호텔', toneNote: '', contact: '주소: 서울 중구 을지로 164 호텔국도 · 전화: 02-6466-1234', formality: 3, formats: ['instagram', 'momcafe'] },
 ];
 
@@ -791,6 +857,99 @@ ${extra}
 위 정보로 ${fmtLabel} 원고를 작성해주세요.`;
 }
 
+/* ============================================================
+   서울가든호텔 전용 인스타그램 특수 포맷
+============================================================ */
+function buildSeoulGardenSystemPrompt(){
+  return `당신은 서울가든호텔 SNS 계정을 담당하는 전문 카피라이터입니다. 아래 형식을 정확히 따라야 합니다.
+
+[참고 레퍼런스]
+𝐒𝐮𝐦𝐦𝐞𝐫 𝐏𝐚𝐜𝐤𝐚𝐠𝐞🍧
+
+무더운 여름
+가장 시원하고 달콤한 하루를 보내는 방법.
+
+서울가든호텔에서
+편안한 객실에서의 휴식과
+여름을 담은 빙수 한 그릇으로
+한여름의 여유를 즐겨보세요.
+
+도심 속에서 만나는 가장 달콤한 여름
+서울가든호텔 <썸머 패키지>와 함께하세요.
+
+▫️혜택
+- 객실 1박
+- 플라워 서울가든 빙수 또는 전통 통단팥 빙수 택 1
+- 카페 음료 20% 할인 (*주류 · 병음료 · 음식 제외)
+
+[문체 원칙]
+- 정중한 존댓말, 계절감·상황 공감으로 시작해 자연스럽게 혜택으로 이어갈 것.
+- "완벽한", "특별한 순간을 선사합니다" 같은 상투적 AI 문구 금지. 실제 감각·장면 묘사로 시작할 것.
+- 절대 존재하지 않는 정보(가격, 날짜 등)를 지어내지 말고, 입력된 이슈/프로모션 정보만 사실로 사용할 것.
+
+[반드시 아래 라벨 형식 그대로, 이 순서로만 출력할 것 — 다른 설명이나 마크다운 없이]
+
+[영문 제목]: (영어 소문자/대문자 그대로, 볼드 변환은 하지 말 것. 2~4 단어의 짧은 캠페인/주제명. 예: Summer Package)
+[제목 이모지]: (내용과 어울리는 이모지 1개만)
+[한글 본문]: (레퍼런스와 같은 톤으로, 상황 공감 도입 → 혜택 소개 → 브랜드로 마무리. "▫️혜택" 목록이 있다면 이슈 정보를 바탕으로 포함. 예약/문의 문구는 절대 포함하지 말 것 — 별도로 고정 삽입됨)
+[영문 본문]: (한글 본문을 그대로 직역하지 말고, 같은 내용을 자연스러운 영어 카피로 재작성. 예약/문의 문구는 포함하지 말 것)
+[대표 해시태그]: (호텔명 국문+영문 해시태그 2개만, 예: #서울가든호텔 #seoulgardenhotel)
+[관련 해시태그]: (이번 주제·시즌에 맞는 한국어 해시태그 정확히 10개, 지역·숙소 카테고리 태그 포함)
+[외국어 해시태그]: (일본어, 중국어 등 영어 외 외국어 해시태그 정확히 3개, 서울 여행 관련)`;
+}
+
+function buildSeoulGardenUserPrompt(){
+  const keyword = els.keyword.value.trim() || '(키워드 미입력)';
+  const issue = els.issue.value.trim() || '(세부 정보 미입력 — 일반적인 표현으로 작성)';
+  const targets = selectedTargets.length ? selectedTargets.join(', ') : '전체 대상';
+  return `키워드: ${keyword}
+이슈/프로모션 내용: ${issue}
+타겟: ${targets}
+톤 강도 조정: ${formalityLabels[els.formality.value]} 수준으로 맞춰주세요.
+
+위 정보로 서울가든호텔 인스타그램 원고를 작성해주세요.`;
+}
+
+function parseLabeledBlock(text, label){
+  const re = new RegExp('\\[' + label + '\\]\\s*:?\\s*([\\s\\S]*?)(?=\\n\\[[^\\]]+\\]\\s*:|$)');
+  const m = text.match(re);
+  return m ? m[1].trim() : '';
+}
+
+function assembleSeoulGardenOutput(rawText){
+  const enTitle = parseLabeledBlock(rawText, '영문 제목');
+  const emoji = parseLabeledBlock(rawText, '제목 이모지');
+  const koBody = parseLabeledBlock(rawText, '한글 본문');
+  const enBody = parseLabeledBlock(rawText, '영문 본문');
+  const mainTags = parseLabeledBlock(rawText, '대표 해시태그');
+  const relTags = parseLabeledBlock(rawText, '관련 해시태그');
+  const foreignTags = parseLabeledBlock(rawText, '외국어 해시태그');
+
+  // 라벨 파싱이 하나라도 실패하면, 원문을 그대로 보여줘서 최소한 내용은 확인 가능하게 함
+  if(!enTitle || !koBody || !enBody){
+    return rawText + '\n\n(⚠ 형식 자동 조립에 실패해 원본 그대로 표시했어요. 다시 생성해보시거나, 수동으로 정리해주세요.)';
+  }
+
+  const boldTitle = boldMathSerif(enTitle);
+
+  return `${boldTitle}${emoji}
+
+${koBody}
+
+${SEOUL_GARDEN_FIXED.koReserve}
+
+￣
+${boldTitle} ${emoji}
+
+${enBody}
+
+${SEOUL_GARDEN_FIXED.enReserve}
+
+${mainTags}
+${relTags}
+${foreignTags}`;
+}
+
 function buildAdSystemPrompt(){
   const p = adProductGuide[adPlatform][adProductIdx];
   const platformLabel = { naver: '네이버', kakao: '카카오', meta: '메타' }[adPlatform];
@@ -931,14 +1090,14 @@ __________________________
 
 "[캐러셀 제목]"
 - 표지(1페이지)에 들어갈 후킹 카피. 반드시 2줄로 작성하고, 두 줄은 줄바꿈으로 구분할 것.
-- 각 줄은 공백 포함 12자를 넘지 않고, 두 줄을 합쳐도 24자를 넘지 않을 것. 각 줄 끝에 실제로 세어본 글자 수를 "(n자)"로 표기할 것.
-- 톤: Z세대가 SNS 저장 게시물에서 쓸 법한 감각적이고 트렌디한 한 마디. 유치한 급식체나 억지 신조어를 넣기보다, 짧고 리듬감 있는 구어체 축약으로 시선을 확 잡아챌 것. "완벽한 O를 위한", "지금 바로 떠나세요" 같은 상투적 카피는 쓰지 말 것.
+- 각 줄은 공백 포함 10~15자를 반드시 채울 것 (두 줄 합계 약 20~30자). 너무 짧게 쓰지 말 것 — 한 단어짜리 줄이나 5자 이하로 끝내지 말고, 각 줄이 최소 10자 이상은 되도록 문장을 완성할 것. 각 줄 끝에 실제로 세어본 글자 수를 "(n자)"로 표기할 것.
+- 톤: 29cm의 "29매거진"(29CM Magazine) 같은 감각적이고 트렌디한 에디토리얼 톤을 참고할 것 — Z세대가 SNS 저장 게시물에서 쓸 법한 담백하면서도 세련된 한 마디. 유치한 급식체나 억지 신조어를 넣기보다, 짧고 리듬감 있는 구어체 축약으로 시선을 확 잡아챌 것. "완벽한 O를 위한", "지금 바로 떠나세요" 같은 상투적 카피는 쓰지 말 것.
 
 "[페이지별 이미지 텍스트]"
 - 지정된 페이지 수만큼 "1페이지:", "2페이지:" 형식으로 구분해서 작성.
 - 각 페이지 텍스트는 반드시 2줄로 작성하고, 각 줄은 공백 포함 30자를 넘지 않으며, 두 줄을 합쳐도 60자를 넘지 않을 것. 각 줄 끝에 "(n자)"로 실제 글자 수를 표기할 것.
 - 장소의 주소는 이 2줄 글자 수 제한에 포함하지 말 것. 주소가 있다면 해당 페이지 항목 아래 별도 줄에 "주소: ..." 형태로 붙일 것 (글자 수 제한과 무관).
-- 톤앤매너: 여행 매거진 화보 카피처럼 담백하되 감성적인 문장. 정보를 나열하지 말고, 그 장소·순간의 공기와 분위기가 느껴지는 문장으로 쓸 것.
+- 톤앤매너: [캐러셀 제목]과 동일하게 29매거진 스타일의 여행 매거진 화보 카피처럼 담백하되 감성적인 문장. 정보를 나열하지 말고, 그 장소·순간의 공기와 분위기가 느껴지는 문장으로 쓸 것.
 
 "[본문 캡션]"
 - 샘플과 같은 톤의 인스타그램 캡션 전체 (사인오프·해시태그 포함).
@@ -1007,14 +1166,71 @@ function wrapForMobile(text, maxLen = 25){
   }).join('\n');
 }
 
+function isSeoulGardenSelected(){
+  const idx = els.preset.value;
+  if(idx === '') return false;
+  return hotelPresets[Number(idx)]?.specialFormat === 'seoulGarden';
+}
+
+function currentSeasonKR(){
+  const m = new Date().getMonth() + 1;
+  if([3,4,5].includes(m)) return '봄';
+  if([6,7,8].includes(m)) return '여름';
+  if([9,10,11].includes(m)) return '가을';
+  return '겨울';
+}
+
+function buildIdeaSystemPrompt(){
+  const hotelList = hotelPresets.map(h => {
+    const desc = h.toneNote ? h.toneNote : h.keywords;
+    return `- ${h.name} (${desc})`;
+  }).join('\n');
+
+  return `당신은 호텔·여행 마케팅 콘텐츠 기획자입니다. 반복 제작으로 소재가 고갈된 SNS 담당자를 위해, 담당 호텔 10곳과 계절을 참고해 새로운 콘텐츠 주제를 추천합니다.
+
+[담당 호텔 10곳]
+${hotelList}
+
+[요청 사항]
+- 정확히 20개의 콘텐츠 주제를 추천할 것.
+- 계절 트렌드를 반영할 것 (예: 여름 → 빙수, 워터파크, 여름휴가 / 겨울 → 온천, 캐롤, 연말 파티 등).
+- 위 10곳의 서로 다른 위치·특성·타겟을 골고루 반영해, 특정 호텔에만 아이디어가 몰리지 않게 다양화할 것.
+- 최근 호텔·여행 업계에서 화제가 될 만한 트렌드 소재를 함께 고려하되, 존재하지 않는 구체적 뉴스나 통계를 사실인 것처럼 지어내지 말 것.
+- 각 주제는 인스타그램/블로그/온드미디어 캐러셀 등으로 바로 이어서 원고화할 수 있을 만큼 구체적일 것 (막연한 주제 금지).
+- 출력 형식: 한 줄에 하나씩, 정확히 "N. 주제 제목 — 한 줄 소재 설명" 형태로 작성. 그 외 설명, 마크다운 기호 없이 순수 텍스트로만 출력.`;
+}
+
+function buildIdeaUserPrompt(){
+  const seasonSel = els.ideaSeason.value;
+  const season = seasonSel === 'auto' ? currentSeasonKR() : seasonSel;
+  const note = els.ideaNote.value.trim();
+  return `기준 계절: ${season}
+${note ? '참고 사항: ' + note : ''}
+
+위 조건으로 콘텐츠 주제 20개를 추천해주세요.`;
+}
+
+function parseIdeaList(text){
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const ideas = [];
+  for(const line of lines){
+    const m = line.match(/^\d+\.\s*(.+?)\s*[—-]\s*(.+)$/);
+    if(m){
+      ideas.push({ title: m[1].trim(), desc: m[2].trim() });
+    }
+  }
+  return ideas;
+}
+
 async function generate(){
   let systemPrompt, userPrompt, maxTokens, eyebrowLabel, titleLabel, metaBits;
+  const seoulGarden = activeTab === 'hotel' && hotelFormat === 'instagram' && isSeoulGardenSelected();
 
   if(activeTab === 'hotel'){
     if(!els.hotel.value.trim()){ alert('호텔명을 입력해주세요.'); return; }
-    systemPrompt = buildHotelSystemPrompt(hotelFormat);
-    userPrompt = buildHotelUserPrompt();
-    maxTokens = hotelFormat === 'blog' ? 4096 : 1024;
+    systemPrompt = seoulGarden ? buildSeoulGardenSystemPrompt() : buildHotelSystemPrompt(hotelFormat);
+    userPrompt = seoulGarden ? buildSeoulGardenUserPrompt() : buildHotelUserPrompt();
+    maxTokens = hotelFormat === 'blog' ? 4096 : 1536;
     eyebrowLabel = { instagram: 'INSTAGRAM DRAFT', blog: 'BLOG DRAFT', momcafe: 'MOMCAFE DRAFT' }[hotelFormat];
     titleLabel = els.hotel.value.trim();
     metaBits = [
@@ -1029,7 +1245,7 @@ async function generate(){
     eyebrowLabel = 'AD COPY DRAFT';
     titleLabel = { naver: '네이버', kakao: '카카오', meta: '메타' }[adPlatform] + ' 광고 카피';
     metaBits = [adProductGuide[adPlatform][adProductIdx].label];
-  } else {
+  } else if(activeTab === 'magazine'){
     if(!els.magTopic.value.trim()){ alert('주제를 입력해주세요.'); return; }
     systemPrompt = buildMagazineSystemPrompt(magStyle, Number(els.magPages.value) || 7);
     userPrompt = buildMagazineUserPrompt();
@@ -1037,6 +1253,14 @@ async function generate(){
     eyebrowLabel = 'MAGAZINE DRAFT';
     titleLabel = els.magTopic.value.trim();
     metaBits = [magStyle === 'list' ? '리스트형' : '단일 장소형', `${Number(els.magPages.value) || 7}페이지`];
+  } else {
+    // idea
+    systemPrompt = buildIdeaSystemPrompt();
+    userPrompt = buildIdeaUserPrompt();
+    maxTokens = 3072;
+    eyebrowLabel = 'IDEA LIST';
+    titleLabel = '콘텐츠 아이디어';
+    metaBits = [els.ideaSeason.value === 'auto' ? `${currentSeasonKR()} (자동 감지)` : els.ideaSeason.value];
   }
 
   els.btnGen.disabled = true;
@@ -1081,19 +1305,67 @@ async function generate(){
       throw new Error('빈 응답을 받았습니다. 다시 시도해주세요.');
     }
 
-    let finalText = (activeTab === 'hotel' && hotelFormat === 'blog') ? wrapForMobile(text, 25) : text;
+    els.outEyebrow.textContent = eyebrowLabel;
+    els.outTitle.textContent = titleLabel;
+
+    if(activeTab === 'idea'){
+      const ideas = parseIdeaList(text);
+      if(ideas.length === 0){
+        els.outArea.innerHTML = `<div class="card"><div class="card-body"></div></div>`;
+        els.outArea.querySelector('.card-body').textContent = text;
+        lastOutputText = text;
+        els.btnCopy.style.display = 'inline-block';
+      } else {
+        const list = document.createElement('div');
+        list.className = 'idea-list';
+        ideas.forEach(idea => {
+          const row = document.createElement('button');
+          row.className = 'idea-row';
+          row.innerHTML = `<div class="idea-title"></div><div class="idea-desc"></div>`;
+          row.querySelector('.idea-title').textContent = idea.title;
+          row.querySelector('.idea-desc').textContent = idea.desc;
+          row.addEventListener('click', () => {
+            navigator.clipboard.writeText(idea.title).then(() => {
+              let tag = row.querySelector('.idea-copied');
+              if(!tag){
+                tag = document.createElement('div');
+                tag.className = 'idea-copied';
+                row.appendChild(tag);
+              }
+              tag.textContent = '복사됨 — 원하는 탭에 붙여넣으세요';
+              setTimeout(() => { tag.remove(); }, 1800);
+            });
+          });
+          list.appendChild(row);
+        });
+        els.outArea.innerHTML = '';
+        els.outArea.appendChild(list);
+        lastOutputText = text;
+        els.btnCopy.style.display = 'inline-block';
+      }
+      els.outMeta.innerHTML = metaBits.map(m => `<span class="pill">${m}</span>`).join('');
+      els.outMeta.style.display = 'flex';
+      return;
+    }
+
+    let finalText;
+    if(seoulGarden){
+      finalText = assembleSeoulGardenOutput(text);
+    } else if(activeTab === 'hotel' && hotelFormat === 'blog'){
+      finalText = wrapForMobile(text, 25);
+    } else {
+      finalText = text;
+    }
     if(data.stop_reason === 'max_tokens'){
       finalText += '\n\n(⚠ 분량이 길어 일부가 잘렸을 수 있어요. 입력 내용을 조금 줄이거나 다시 생성해보세요.)';
     }
     lastOutputText = finalText;
 
-    els.outEyebrow.textContent = eyebrowLabel;
-    els.outTitle.textContent = titleLabel;
     els.outArea.innerHTML = `<div class="card"><div class="card-body"></div></div>`;
     els.outArea.querySelector('.card-body').textContent = finalText;
     els.btnCopy.style.display = 'inline-block';
 
-    if(activeTab === 'hotel' && hotelFormat === 'instagram'){
+    if(activeTab === 'hotel' && hotelFormat === 'instagram' && !seoulGarden){
       const bodyOnly = text.split('\n').filter(l => !l.trim().startsWith('#')).join('');
       metaBits.push(`본문 약 ${bodyOnly.length}자`);
     }
