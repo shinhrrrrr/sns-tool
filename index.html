@@ -353,11 +353,12 @@
         <div class="chips" id="f-target">
           <div class="chip" data-v="가족">가족</div>
           <div class="chip" data-v="커플">커플</div>
-          <div class="chip" data-v="외국인">외국인</div>
+          <div class="chip" data-v="외국인(영어)">외국인 · 영어</div>
+          <div class="chip" data-v="외국인(일본어)">외국인 · 일본어</div>
           <div class="chip" data-v="비즈니스">비즈니스</div>
           <div class="chip" data-v="친구/모임">친구·모임</div>
         </div>
-        <div class="hint">선택하지 않으면 전체 대상 톤으로 작성해요. '외국인' 선택 시 국문+영문으로 함께 생성돼요 (맘카페 포맷 제외).</div>
+        <div class="hint">선택하지 않으면 전체 대상 톤으로 작성해요. '외국인 · 영어' / '외국인 · 일본어'를 고르면 해당 언어 번역이 국문 뒤에 함께 생성돼요 (둘 다 선택 가능, 맘카페 포맷 제외).</div>
       </div>
 
       <div class="field">
@@ -529,9 +530,43 @@ function boldMathSerif(str){
 }
 
 const SEOUL_GARDEN_FIXED = {
-  koReserve: '▫️예약 : 프로필 링크\n▫️문의 : 02-710-7111',
-  enReserve: '▫️Reservation : Link in Bio\n▫️Inquiry : +82-2-710-7111',
+  koReserve: '◻️예약 : 프로필 링크\n◻️문의 : 02-710-7111',
+  enReserve: '◻️Reservation : Link in Bio\n◻️Inquiry : +82-2-710-7111',
+  jaReserve: '◻️ご予約 : プロフィールのリンク\n◻️お問い合わせ : +82-2-710-7111',
 };
+
+/* ── 공통 헬퍼 ─────────────────────────────── */
+function getSelectedPreset(){
+  const idx = els.preset.value;
+  return idx === '' ? null : hotelPresets[Number(idx)];
+}
+function wantsLang(lang){
+  return selectedTargets.includes('외국인(' + lang + ')');
+}
+
+// 하단 정보 정리글 통일: 주소는 📍, 그 외 정보 줄(운영시간·가격·예약·문의 등)은 ◻️ 로 시작하도록 맞춤
+function normalizeMarkers(text){
+  const re = /^(\s*)[\u23F0\u{1F4B0}\u{1F4DE}\u260E\u{1F550}\u{1F552}\u{1F5D3}\u{1F4C5}\u{1F3AB}\u{1F4B3}\u25AB\u25AA\u25FD\u25FE\u25FB\u25FC]\uFE0F?/u;
+  return text.split('\n').map(line => line.replace(re, '$1◻️')).join('\n');
+}
+
+// 해시태그 맨 마지막을 지정한 태그로 마무리 (중복 제거 후 마지막 해시태그 줄 끝에 붙임)
+function applyEndTag(text, tag){
+  if(!tag) return text;
+  const esc = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let t = text.replace(new RegExp('[ \\t]*' + esc + '(?![A-Za-z0-9_가-힣])', 'gi'), '').replace(/\s+$/, '');
+  const lines = t.split('\n');
+  let idx = -1;
+  for(let i = lines.length - 1; i >= 0; i--){ if(/#\S/.test(lines[i])){ idx = i; break; } }
+  if(idx === -1) return t + '\n' + tag;
+  lines[idx] = lines[idx].replace(/\s+$/, '') + ' ' + tag;
+  return lines.join('\n');
+}
+
+// 호텔국도 영문 표기 안전장치: GUKDO → KUKDO
+function fixKukdo(text){
+  return text.replace(/GUKDO/g, 'KUKDO').replace(/Gukdo/g, 'Kukdo').replace(/gukdo/g, 'kukdo');
+}
 
 const els = {
   preset: document.getElementById('f-preset'),
@@ -563,16 +598,16 @@ const els = {
 };
 
 const hotelPresets = [
-  { name: '이천 라드라비 아트 앤 리조트', keywords: '경기도 이천 데이트, 서울 근교 리조트', toneNote: '자연과 예술, 웰니스가 만나는 곳 (Where Nature Meets Art and Wellness)', contact: '주소: 경기도 이천시 모가면 진상미로 1163길 220 · 전화: 031-631-5800', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
-  { name: '서울 더퍼스트스테이', keywords: '마곡 호텔, 발산 호텔, 김포공항 인근 숙소', toneNote: '명품의 가치가 느껴지는 비즈니스 감성 공간', contact: '주소: 서울특별시 강서구 마곡동로4길 23 · 전화: 02-2600-8300', formality: 4, formats: ['instagram', 'momcafe'] },
-  { name: '창녕 부곡로얄호텔', keywords: '창녕 온천 호텔, 창녕 가족 숙소', toneNote: '좋은 온천 수질과 아이들 놀기 좋은 환경의 조화', contact: '주소: 경남 창녕군 부곡면 온천중앙로 3 부곡로얄관광호텔 · 전화: 055-536-7300', formality: 3, formats: ['instagram', 'momcafe'] },
-  { name: '제주 라마다제주시티호텔', keywords: '제주도호텔, 제주도숙소, 한라산숙소', toneNote: '', contact: '주소: 제주 제주시 중앙로 304, Jeju 63222 · 대표번호: 064-759-8831 · 예약문의: 02-512-8886', formality: 3, formats: ['instagram', 'momcafe'] },
-  { name: '제주 한림리조트', keywords: '제주한림리조트, 제주힐링여행, 제주바다숙소, 제주리조트', toneNote: '푸른 바다와 제주의 자연을 담은 낭만적인 휴양지', contact: '주소: 제주시 한림읍 일주서로 5083-5 (협재해수욕장 2분거리) · 전화: 064-796-8231 · 이메일: hallimresort@naver.com', formality: 3, formats: ['instagram', 'momcafe'] },
-  { name: '머큐어 서울 마곡', keywords: '마곡 호텔, 서울 수영장 호텔, 서울 호캉스', toneNote: '', contact: '주소: 143 Magok joongang-ro, Gangsu-gu, Seoul, Korea 07797 · 전화: 02-2261-6000', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
-  { name: '강릉 SL호텔강릉', keywords: '강릉 호텔, 주문진 호텔, 강릉 오션뷰 숙소', toneNote: '', contact: '주소: 강원 강릉시 주문진읍 주문로 59 SL호텔 강릉, Gangneung 25414 · 전화: 033-920-1800', formality: 3, formats: ['instagram', 'momcafe'] },
-  { name: '강릉 더홍씨호텔 강릉', keywords: '강릉 호텔, 강릉여행, 강릉숙박, 강릉숙소', toneNote: '', contact: '주소: 교동광장로100번길 8, Gangneung 25512 · 전화: 033-641-8011', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
-  { name: '서울 서울가든호텔', keywords: '마포역 숙소, 공덕역 숙소, 서울 호캉스', toneNote: '', contact: '주소: 서울 마포구 마포대로 58 가든호텔 · 전화: 02-710-7111', formality: 3, formats: ['instagram', 'momcafe'], specialFormat: 'seoulGarden' },
-  { name: '서울 호텔국도', keywords: '을지로 숙소, 서울 호캉스, 서울 수영장 호텔', toneNote: '', contact: '주소: 서울 중구 을지로 164 호텔국도 · 전화: 02-6466-1234', formality: 3, formats: ['instagram', 'momcafe'] },
+  { name: '라드라비 아트 앤 리조트', region: '경기 이천', keywords: '경기도 이천 데이트, 서울 근교 리조트', toneNote: '자연과 예술, 웰니스가 만나는 곳 (Where Nature Meets Art and Wellness)', contact: '주소: 경기도 이천시 모가면 진상미로 1163길 220 · 전화: 031-631-5800', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
+  { name: '더퍼스트스테이', region: '서울 마곡', keywords: '마곡 호텔, 발산 호텔, 김포공항 인근 숙소', toneNote: '명품의 가치가 느껴지는 비즈니스 감성 공간', contact: '주소: 서울특별시 강서구 마곡동로4길 23 · 전화: 02-2600-8300', formality: 4, formats: ['instagram', 'momcafe'] },
+  { name: '부곡로얄호텔', region: '경남 창녕', keywords: '창녕 온천 호텔, 창녕 가족 숙소', toneNote: '좋은 온천 수질과 아이들 놀기 좋은 환경의 조화', contact: '주소: 경남 창녕군 부곡면 온천중앙로 3 부곡로얄관광호텔 · 전화: 055-536-7300', formality: 3, formats: ['instagram', 'momcafe'] },
+  { name: '라마다제주시티호텔', region: '제주 제주시', footerStyle: 'free', endTag: '#ramadajejucity', keywords: '제주도호텔, 제주도숙소, 한라산숙소', toneNote: '', contact: '주소: 제주 제주시 중앙로 304, Jeju 63222 · 대표번호: 064-759-8831 · 예약문의: 02-512-8886', formality: 3, formats: ['instagram', 'momcafe'] },
+  { name: '한림리조트', region: '제주 한림', footerStyle: 'free', endTag: '#hallimresort', keywords: '제주한림리조트, 제주힐링여행, 제주바다숙소, 제주리조트', toneNote: '푸른 바다와 제주의 자연을 담은 낭만적인 휴양지', contact: '주소: 제주시 한림읍 일주서로 5083-5 (협재해수욕장 2분거리) · 전화: 064-796-8231 · 이메일: hallimresort@naver.com', formality: 3, formats: ['instagram', 'momcafe'] },
+  { name: '머큐어 서울 마곡', region: '서울 마곡', keywords: '마곡 호텔, 서울 수영장 호텔, 서울 호캉스', toneNote: '', contact: '주소: 143 Magok joongang-ro, Gangsu-gu, Seoul, Korea 07797 · 전화: 02-2261-6000', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
+  { name: 'SL호텔강릉', region: '강원 강릉', keywords: '강릉 호텔, 주문진 호텔, 강릉 오션뷰 숙소', toneNote: '', contact: '주소: 강원 강릉시 주문진읍 주문로 59 SL호텔 강릉, Gangneung 25414 · 전화: 033-920-1800', formality: 3, formats: ['instagram', 'momcafe'] },
+  { name: '더홍씨호텔 강릉', region: '강원 강릉', keywords: '강릉 호텔, 강릉여행, 강릉숙박, 강릉숙소', toneNote: '', contact: '주소: 교동광장로100번길 8, Gangneung 25512 · 전화: 033-641-8011', formality: 3, formats: ['instagram', 'blog', 'momcafe'] },
+  { name: '서울가든호텔', region: '서울 마포', keywords: '마포역 숙소, 공덕역 숙소, 서울 호캉스', toneNote: '', contact: '주소: 서울 마포구 마포대로 58 가든호텔 · 전화: 02-710-7111', formality: 3, formats: ['instagram', 'momcafe'], specialFormat: 'seoulGarden' },
+  { name: '호텔국도', region: '서울 을지로', enName: 'Hotel KUKDO', enNote: "첫 글자는 K입니다 ('GUKDO'가 아니라 'KUKDO'로 표기)", keywords: '을지로 숙소, 서울 호캉스, 서울 수영장 호텔', toneNote: '', contact: '주소: 서울 중구 을지로 164 호텔국도 · 전화: 02-6466-1234', formality: 3, formats: ['instagram', 'momcafe'] },
 ];
 
 function populatePresets(){
@@ -732,6 +767,13 @@ els.btnCopy.addEventListener('click', () => {
 });
 
 function buildHotelSystemPrompt(fmt){
+  const _preset = getSelectedPreset();
+  const footerRule = (_preset && _preset.footerStyle === 'free')
+    ? '- 장소/시간/가격/예약 등 실용 정보가 있으면 📍⏰💰📞 등 이모지 라벨로 짧게 정리.'
+    : '- 본문 최하단 정보 정리글 규칙(매우 중요): 주소가 있으면 그 줄은 반드시 📍 로 시작하고, 그 외 정보 줄(운영시간·가격·예약·문의 등)은 전부 ◻️ 로 시작해 통일할 것. ⏰💰📞 같은 다른 이모지 라벨은 쓰지 말 것 (위 인스타그램 샘플 1의 ⏰·📞 라벨은 예전 방식이므로 따르지 말 것). 예시:\n  📍 주소 ...\n  ◻️ 예약 : ...\n  ◻️ 문의 : ...';
+  const endTagRule = (_preset && _preset.endTag)
+    ? `\n- 해시태그의 맨 마지막은 반드시 ${_preset.endTag} (영어 태그)로 마무리할 것.`
+    : '';
   const common = `당신은 호텔 SNS 계정을 대행 운영하는 전문 카피라이터입니다.
 아래 실제 원고 샘플과 브랜드 톤 가이드를 참고해, 동일한 톤·구조·문체로 새 원고를 작성합니다.
 
@@ -793,9 +835,9 @@ MENU
 - 본문 분량은 해시태그를 제외하고 공백 포함 200~400자 내외로 작성.
 - 짧은 문장과 줄바꿈을 적극적으로 사용해 스크롤하며 읽기 편하게 구성 (한 문단은 1~3문장 이내, 문단 사이 줄바꿈). 단, 이야기는 하나로 이어져야 함.
 - 이모지를 문장 흐름에 어울리게 배치 (과하지 않게).
-- 장소/시간/가격/예약 등 실용 정보가 있으면 📍⏰💰📞 등 이모지 라벨로 짧게 정리.
-- 마지막 줄에 해시태그 12~15개를 공백으로 구분해 한 줄로 제시 (브랜드 태그, 지역 태그, 키워드 태그, 시즌 태그 혼합).
-- 타겟에 '외국인'이 포함되면, 국문 본문 뒤에 구분선(―)을 넣고 영문 버전을 이어서 작성.`;
+${footerRule}
+- 마지막 줄에 해시태그 12~15개를 공백으로 구분해 한 줄로 제시 (브랜드 태그, 지역 태그, 키워드 태그, 시즌 태그 혼합).${endTagRule}
+- 타겟에 '외국인(영어)'가 포함되면 국문 본문 뒤에 구분선(―)을 넣고 영어 번역본을, '외국인(일본어)'가 포함되면 이어서 구분선(―) 뒤에 일본어 번역본을 작성할 것 (둘 다 포함되면 영어 → 일본어 순서). 번역본은 직역이 아니라 해당 언어 독자에게 자연스러운 카피로 다듬고, 주소·예약·문의 같은 정보 줄도 그 언어로 옮길 것. 해시태그는 모든 언어 본문이 끝난 뒤 맨 마지막에 한 번만 제시.`;
   }
 
   if(fmt === 'blog'){
@@ -811,7 +853,7 @@ MENU
 - 각 소제목 아래 본문은 3~6문장, 문장은 짧고 간결하게.
 - 아웃트로는 여운을 남기며 방문/예약을 자연스럽게 유도.
 - 맨 마지막 줄에 "해시태그: " 로 시작해서, 검색 유입에 유리한 해시태그 5~8개를 공백으로 구분해 제시 (본문과 분리된 별도 줄).
-- 타겟에 '외국인'이 포함되면 인트로 뒤에 짧은 영문 요약 3~4문장을 덧붙일 것.
+- 타겟에 '외국인(영어)'가 포함되면 인트로 뒤에 짧은 영어 요약 3~4문장을, '외국인(일본어)'가 포함되면 짧은 일본어 요약 3~4문장을 덧붙일 것 (둘 다 포함되면 영어 → 일본어 순서).
 - 문장 길이가 길어지지 않도록 짧게 끊어 쓸 것 (25자 내외 줄바꿈 처리를 감안한 문장 설계).`;
   }
 
@@ -837,6 +879,9 @@ function buildHotelUserPrompt(){
   const preset = presetIdx !== '' ? hotelPresets[Number(presetIdx)] : null;
 
   let extra = '';
+  if(preset && preset.enName){
+    extra += `영문 호텔명 표기(반드시 이 철자 그대로 사용, 절대 다른 철자로 바꾸지 말 것): ${preset.enName}${preset.enNote ? ' — ' + preset.enNote : ''}\n`;
+  }
   if(hotelFormat !== 'momcafe'){
     extra += `톤 강도 조정: ${formalityLabels[els.formality.value]} 수준으로 맞춰주세요.\n`;
   }
@@ -877,7 +922,7 @@ function buildSeoulGardenSystemPrompt(){
 도심 속에서 만나는 가장 달콤한 여름
 서울가든호텔 <썸머 패키지>와 함께하세요.
 
-▫️혜택
+◻️혜택
 - 객실 1박
 - 플라워 서울가든 빙수 또는 전통 통단팥 빙수 택 1
 - 카페 음료 20% 할인 (*주류 · 병음료 · 음식 제외)
@@ -891,8 +936,9 @@ function buildSeoulGardenSystemPrompt(){
 
 [영문 제목]: (영어 소문자/대문자 그대로, 볼드 변환은 하지 말 것. 2~4 단어의 짧은 캠페인/주제명. 예: Summer Package)
 [제목 이모지]: (내용과 어울리는 이모지 1개만)
-[한글 본문]: (레퍼런스와 같은 톤으로, 상황 공감 도입 → 혜택 소개 → 브랜드로 마무리. "▫️혜택" 목록이 있다면 이슈 정보를 바탕으로 포함. 예약/문의 문구는 절대 포함하지 말 것 — 별도로 고정 삽입됨)
+[한글 본문]: (레퍼런스와 같은 톤으로, 상황 공감 도입 → 혜택 소개 → 브랜드로 마무리. "◻️혜택" 목록이 있다면 이슈 정보를 바탕으로 포함. 예약/문의 문구는 절대 포함하지 말 것 — 별도로 고정 삽입됨)
 [영문 본문]: (한글 본문을 그대로 직역하지 말고, 같은 내용을 자연스러운 영어 카피로 재작성. 예약/문의 문구는 포함하지 말 것)
+[일본어 본문]: (타겟에 '외국인(일본어)'가 있을 때만 작성, 없으면 이 줄 자체를 출력하지 말 것. 한글 본문과 같은 내용을 일본어 독자에게 자연스러운 카피로 재작성. 예약/문의 문구는 포함하지 말 것)
 [대표 해시태그]: (호텔명 국문+영문 해시태그 2개만, 예: #서울가든호텔 #seoulgardenhotel)
 [관련 해시태그]: (이번 주제·시즌에 맞는 한국어 해시태그 정확히 10개, 지역·숙소 카테고리 태그 포함)
 [외국어 해시태그]: (일본어, 중국어 등 영어 외 외국어 해시태그 정확히 3개, 서울 여행 관련)`;
@@ -907,7 +953,7 @@ function buildSeoulGardenUserPrompt(){
 타겟: ${targets}
 톤 강도 조정: ${formalityLabels[els.formality.value]} 수준으로 맞춰주세요.
 
-위 정보로 서울가든호텔 인스타그램 원고를 작성해주세요.`;
+위 정보로 서울가든호텔 인스타그램 원고를 작성해주세요.${wantsLang('일본어') ? '\n타겟에 외국인(일본어)가 포함되어 있으므로 [일본어 본문]도 함께 작성해주세요.' : ''}`;
 }
 
 function parseLabeledBlock(text, label){
@@ -921,6 +967,7 @@ function assembleSeoulGardenOutput(rawText){
   const emoji = parseLabeledBlock(rawText, '제목 이모지');
   const koBody = parseLabeledBlock(rawText, '한글 본문');
   const enBody = parseLabeledBlock(rawText, '영문 본문');
+  const jaBody = parseLabeledBlock(rawText, '일본어 본문');
   const mainTags = parseLabeledBlock(rawText, '대표 해시태그');
   const relTags = parseLabeledBlock(rawText, '관련 해시태그');
   const foreignTags = parseLabeledBlock(rawText, '외국어 해시태그');
@@ -931,23 +978,40 @@ function assembleSeoulGardenOutput(rawText){
   }
 
   const boldTitle = boldMathSerif(enTitle);
+  const ko = normalizeMarkers(koBody);
+  const en = normalizeMarkers(enBody);
+  const ja = jaBody ? normalizeMarkers(jaBody) : '';
 
-  return `${boldTitle}${emoji}
+  let out = `${boldTitle}${emoji}
 
-${koBody}
+${ko}
 
 ${SEOUL_GARDEN_FIXED.koReserve}
 
 ￣
 ${boldTitle} ${emoji}
 
-${enBody}
+${en}
 
-${SEOUL_GARDEN_FIXED.enReserve}
+${SEOUL_GARDEN_FIXED.enReserve}`;
+
+  if(ja && wantsLang('일본어')){
+    out += `
+
+￣
+${boldTitle} ${emoji}
+
+${ja}
+
+${SEOUL_GARDEN_FIXED.jaReserve}`;
+  }
+
+  out += `
 
 ${mainTags}
 ${relTags}
 ${foreignTags}`;
+  return out;
 }
 
 function buildAdSystemPrompt(){
@@ -1183,7 +1247,7 @@ function currentSeasonKR(){
 function buildIdeaSystemPrompt(){
   const hotelList = hotelPresets.map(h => {
     const desc = h.toneNote ? h.toneNote : h.keywords;
-    return `- ${h.name} (${desc})`;
+    return `- ${h.name} [지역: ${h.region}] (${desc})`;
   }).join('\n');
 
   return `당신은 호텔·여행 마케팅 콘텐츠 기획자입니다. 반복 제작으로 소재가 고갈된 SNS 담당자를 위해, 담당 호텔 10곳과 계절을 참고해 새로운 콘텐츠 주제를 추천합니다.
@@ -1349,13 +1413,23 @@ async function generate(){
     }
 
     let finalText;
+    const _p = getSelectedPreset();
     if(seoulGarden){
       finalText = assembleSeoulGardenOutput(text);
     } else if(activeTab === 'hotel' && hotelFormat === 'blog'){
       finalText = wrapForMobile(text, 25);
+    } else if(activeTab === 'hotel' && hotelFormat === 'instagram'){
+      finalText = text;
+      if(!(_p && _p.footerStyle === 'free')){
+        finalText = normalizeMarkers(finalText);
+      }
+      if(_p && _p.endTag){
+        finalText = applyEndTag(finalText, _p.endTag);
+      }
     } else {
       finalText = text;
     }
+    finalText = fixKukdo(finalText);
     if(data.stop_reason === 'max_tokens'){
       finalText += '\n\n(⚠ 분량이 길어 일부가 잘렸을 수 있어요. 입력 내용을 조금 줄이거나 다시 생성해보세요.)';
     }
